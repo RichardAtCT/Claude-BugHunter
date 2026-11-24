@@ -1,0 +1,5 @@
+# Generated scope files and saved policy copies stay local (your fork is public).
+scopes/*
+!scopes/.gitkeep
+policies/*
+!policies/.gitkeep

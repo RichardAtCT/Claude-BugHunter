@@ -18,18 +18,30 @@ BURP_TOOLS = [
     "mcp__burp__send_http1_request", "mcp__burp__send_http2_request",
     "mcp__burp__get_collaborator_interactions", "mcp__burp__generate_collaborator_payload",
 ]
-SHELL_TOOLS = ["Bash(curl:*)", "Bash(python3:*)", "Bash(jq:*)", "Bash(openssl:*)", "Bash(base64:*)"]
+# python3 is NOT in the default set: it can open raw sockets and ignore the scope proxy, so the
+# "curl-only" boundary would be fictional. It is added only with allow_python=True, which the
+# engine honours only when direct internet egress is closed (locked container, docker/).
+SHELL_TOOLS = ["Bash(curl:*)", "Bash(jq:*)", "Bash(openssl:*)", "Bash(base64:*)"]
+PYTHON_TOOLS = ["Bash(python3:*)"]
+# curl flags that would bypass or replace the scope proxy.
+DISALLOWED_TOOLS = ["Bash(curl --noproxy:*)", "Bash(curl -x:*)", "Bash(curl --proxy:*)",
+                    "Bash(curl --preproxy:*)", "Bash(curl --socks5:*)", "Bash(curl --socks5-hostname:*)",
+                    "Bash(curl --connect-to:*)", "Bash(curl --resolve:*)"]
 
 
-def run_agent(task, skills_on=False, model="claude-sonnet-4-6", max_turns=40, timeout=600):
+def run_agent(task, skills_on=False, model="sonnet", max_turns=40, timeout=600, allow_python=False):
     # skills OFF by default: the eval showed they add ~0 capability but cost ~12-15k tokens/agent.
     has_burp = os.path.exists(MCP_CONFIG)
     config = MCP_CONFIG if has_burp else '{"mcpServers":{}}'
-    allowed_tools = SHELL_TOOLS + (BURP_TOOLS if has_burp else [])
+    if allow_python:
+        import egress_proxy
+        allow_python = not egress_proxy.direct_egress_open()   # only inside a locked network
+    allowed_tools = SHELL_TOOLS + (PYTHON_TOOLS if allow_python else []) + (BURP_TOOLS if has_burp else [])
     cmd = ["claude", "-p", task,
            "--mcp-config", config, "--strict-mcp-config",
            "--permission-mode", "bypassPermissions",
            "--allowedTools", " ".join(allowed_tools),
+           "--disallowedTools", " ".join(DISALLOWED_TOOLS),
            "--max-turns", str(max_turns), "--model", model,
            "--output-format", "json"]
     if not skills_on:

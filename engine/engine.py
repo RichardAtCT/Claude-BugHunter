@@ -29,6 +29,8 @@ import memory                     # noqa: E402  (autopilot ledger; import-isolat
 import closure                    # noqa: E402  (coverage ledger / closure gate)
 import verifier                   # noqa: E402  (deterministic evidence capture + corroboration; never gates)
 import attack_metrics             # noqa: E402  (leak-proof generic metrics; opt-in, counters only)
+import authorization              # noqa: E402  (refuse live targets without a recorded program authorization)
+import egress_proxy               # noqa: E402  (scope-enforcing, rate-limited network egress)
 
 # deterministic priority by class (impact-ish); used by rank. Keep in sync with
 # skill_map.CLASS_SKILL so every routed class gets a sensible (non-default) weight.
@@ -54,8 +56,21 @@ DEFAULT_PHASES = ["recon", "rank", "map"]
 class Engine:
     def __init__(self, scope_path, base, model, max_hunts, max_turns, timeout, mock=False,
                  allow_intrusive=False, parallel=3, expand=False, use_memory=False,
-                 use_metrics=False):
+                 use_metrics=False, rate=5.0, soft_egress=False, agent_python=False):
         self.scope = Scope.load(scope_path)
+        with open(scope_path, encoding="utf-8") as fh:
+            self.raw_scope = json.load(fh)
+        # Live targets need a recorded, recent program authorization (lab scopes are exempt).
+        self.auth_mode = "mock" if mock else authorization.enforce(self.scope, self.raw_scope, scope_path)
+        program_rate = self.raw_scope.get("rate_limit_rps")
+        if program_rate:                       # never exceed the program's own limit
+            rate = min(rate, float(program_rate))
+        self.rate, self.soft_egress, self.agent_python = rate, soft_egress, agent_python
+        if allow_intrusive and self.auth_mode == "authorized" and \
+                not (self.raw_scope.get("authorization") or {}).get("intrusive_allowed"):
+            raise SystemExit("REFUSING --allow-intrusive: the program's authorization record does not set "
+                             "\"intrusive_allowed\": true. Only enable it when the program explicitly permits "
+                             "state-changing tests.")
         state_base = os.path.join(base, ".mock") if mock else base
         self.eng = Engagement(state_base, self.scope.name)
         self.model, self.max_hunts = model, max_hunts
@@ -70,6 +85,39 @@ class Engine:
                      f"intrusive={'ALLOWED' if allow_intrusive else 'READ-ONLY (default)'}")
         for w in getattr(self.scope, "warnings", []):
             self.eng.log(f"scope: warning: {w}")
+        self.proxy = None
+        self._start_egress()
+
+    # ---------------- network egress: scope is a network fact, not a prompt ----------------
+    def _start_egress(self):
+        """Route every child process (curl/katana/gau/claude) through the scope proxy.
+        BUGHUNTER_EGRESS_PROXY set => an external proxy container is the only way out (hard
+        mode, see docker/). Otherwise start an in-process proxy (soft: env-var based)."""
+        os.environ["BUGHUNTER_RATE"] = str(self.rate)
+        external = os.environ.get("BUGHUNTER_EGRESS_PROXY")
+        if external:
+            egress_proxy.export_proxy_env(external)
+            self.egress_mode = "external"
+        else:
+            infra = egress_proxy.DEFAULT_INFRA_ALLOW + list(self.raw_scope.get("infra_allow", []))
+            self.proxy = egress_proxy.EgressProxy(self.scope, rate=self.rate, infra_allow=infra,
+                                                  log=self.eng.log).start()
+            egress_proxy.export_proxy_env(self.proxy.url)
+            self.egress_mode = "in-process"
+        self.eng.log(f"egress: {self.egress_mode} scope proxy at {os.environ['HTTPS_PROXY']} "
+                     f"rate={self.rate}/s auth={self.auth_mode}")
+
+    def _require_hard_egress(self):
+        """Live agent hunting needs a network that cannot bypass the proxy."""
+        if self.mock or self.auth_mode == "lab":
+            return
+        if egress_proxy.direct_egress_open():
+            if not self.soft_egress:
+                raise SystemExit(
+                    "REFUSING TO HUNT: this process can reach the internet directly, so agents could bypass "
+                    "the scope proxy. Run inside the locked container (docker/README.md), or pass "
+                    "--soft-egress to accept an env-var-only boundary (not recommended for live targets).")
+            self.eng.log("egress: WARNING soft boundary — direct internet egress is open (--soft-egress)")
 
     # ---------------- rules of engagement (injected into every agent) ----------------
     def _roe(self):
@@ -79,6 +127,15 @@ class Engine:
                "(no third-party APIs / CDNs / SaaS such as emailjs, salesforce, google, etc.), even to 'prove' a "
                "finding. If proof would require touching an out-of-scope host/service, DO NOT do it — report the "
                "finding but set proof_note='would require out-of-scope action (NOT performed)'.\n")
+        headers = getattr(self, "raw_scope", {}).get("required_headers") or {}
+        if headers:
+            roe += ("- REQUIRED HEADERS (program rule): add to EVERY request: "
+                    + "; ".join(f"-H '{k}: {v}'" for k, v in headers.items()) + "\n")
+        for rule in getattr(self, "raw_scope", {}).get("rules") or []:
+            roe += f"- PROGRAM RULE: {rule}\n"
+        roe += ("- NEVER use leaked, found or guessed credentials or API keys; report them without using them. "
+                "No DoS, no social engineering. Stop at the first proof of impact; if you reach personal data, "
+                "stop and report.\n")
         if not self.allow_intrusive:
             roe += ("- READ-ONLY / NON-DESTRUCTIVE: do NOT perform any state-changing or intrusive action — no sending "
                     "emails, no writes/updates/deletes, no cache purge/revalidate, no account creation, no spam, no "
@@ -337,7 +394,8 @@ class Engine:
                 f'{{"vulnerable":true|false,"severity":"low|medium|high|critical","evidence":"<what proves it>",'
                 f'"request":"<the winning request>","hosts_contacted":["every host you sent a request to"],'
                 f'"proof_note":"<empty, or why proof was limited by scope/read-only>"}}.')
-        r = A.run_agent(task, model=self.model, max_turns=self.max_turns, timeout=self.timeout)
+        r = A.run_agent(task, model=self.model, max_turns=self.max_turns, timeout=self.timeout,
+                        allow_python=getattr(self, "agent_python", False))
         if r.get("error"):
             self.eng.log(f"hunt agent error ({it['url']}): {r['error']}")
             # Hard error (timeout / rate-limit / parse / missing CLI): the item was NOT
@@ -409,7 +467,8 @@ class Engine:
                 f"the severity. Is it a REAL, exploitable vulnerability or a false positive? "
                 f"End with a fenced ```json``` object: "
                 f'{{"real":true|false,"severity":"low|medium|high|critical","reason":"<why, incl. any scope/intrusive caveat>"}}.')
-        r = A.run_agent(task, model=self.model, max_turns=self.max_turns, timeout=self.timeout)
+        r = A.run_agent(task, model=self.model, max_turns=self.max_turns, timeout=self.timeout,
+                        allow_python=getattr(self, "agent_python", False))
         if r.get("error"):
             self.eng.log(f"validate agent error: {r['error']}")
             return {"real": False, "reason": f"verify error: {r['error']}", "errored": True}
@@ -477,9 +536,18 @@ class Engine:
         return path
 
     def run(self, phases):
-        for ph in ALL_PHASES:
-            if ph in phases:
-                getattr(self, ph)()
+        if any(p in phases for p in ("hunt", "validate")):
+            self._require_hard_egress()
+        try:
+            for ph in ALL_PHASES:
+                if ph in phases:
+                    getattr(self, ph)()
+        finally:
+            if self.proxy is not None:
+                blocked = self.proxy.policy.blocked
+                self.eng.log(f"egress: {self.proxy.policy.allowed_target} target connection(s) allowed, "
+                             f"{len(blocked)} blocked" + (f" (e.g. {blocked[0][1]})" if blocked else ""))
+                self.proxy.stop()
         self.eng.set_phase("done")
         self.eng.log(f"engine done | {self.eng.summary()}")
 
@@ -519,7 +587,8 @@ def main():
                     help="explicit phase list; default is recon,rank,map (add --hunt to test)")
     ap.add_argument("--hunt", action="store_true",
                     help="OPT-IN: after mapping, auto-test with agents (recon,rank,map,hunt,validate,report)")
-    ap.add_argument("--model", default="claude-sonnet-4-6")
+    ap.add_argument("--model", default="sonnet",
+                    help="model for headless agents (alias tracks the current Sonnet; default sonnet)")
     ap.add_argument("--max-hunts", type=int, default=10)
     ap.add_argument("--max-turns", type=int, default=40)
     ap.add_argument("--timeout", type=int, default=600)
@@ -538,6 +607,13 @@ def main():
                     help="OPT-IN: record leak-proof generic attack metrics (counters keyed by tech-stack + "
                          "vuln-class only — never host/url/body) and rank class suggestions by past hit-rate. "
                          "Separate store, advisory only. Default OFF.")
+    ap.add_argument("--rate", type=float, default=5.0,
+                    help="max new requests/connections per second to in-scope targets (default 5; "
+                         "lower it if the program sets a stricter limit)")
+    ap.add_argument("--soft-egress", action="store_true",
+                    help="allow --hunt outside the locked container (proxy enforced via env vars only)")
+    ap.add_argument("--agent-python", action="store_true",
+                    help="let hunt agents run python3 (only honoured when direct egress is closed)")
     a = ap.parse_args()
     if a.phases is not None:
         phases = [p.strip() for p in a.phases.split(",") if p.strip()]
@@ -550,7 +626,8 @@ def main():
     else:
         phases = DEFAULT_PHASES                   # default: recon -> rank -> map, then STOP for the operator
     eng = Engine(a.scope, a.base, a.model, a.max_hunts, a.max_turns, a.timeout, a.mock,
-                 a.allow_intrusive, a.parallel, a.expand, a.use_memory, a.use_metrics)
+                 a.allow_intrusive, a.parallel, a.expand, a.use_memory, a.use_metrics,
+                 a.rate, a.soft_egress, a.agent_python)
     eng.run(phases)
     print("\n" + json.dumps(eng.eng.summary(), indent=2))
     print("engagement dir:", eng.eng.dir)

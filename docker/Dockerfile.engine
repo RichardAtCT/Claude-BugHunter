@@ -1,0 +1,13 @@
+# Engine image for hard-egress mode. It has NO direct route to the internet: the
+# compose file puts it only on an `internal` network whose single exit is the
+# scope egress proxy.
+FROM python:3.12-slim
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl jq openssl ca-certificates nodejs npm \
+ && rm -rf /var/lib/apt/lists/* \
+ && npm install -g @anthropic-ai/claude-code \
+ && pip install --no-cache-dir requests
+# Optional recon tools (katana, gau) can be added with a Go build stage; the engine skips them if absent.
+WORKDIR /app
+COPY . /app
+ENTRYPOINT ["python3", "/app/engine/engine.py"]

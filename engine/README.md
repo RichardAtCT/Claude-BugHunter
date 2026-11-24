@@ -45,6 +45,12 @@ map:   redirect_to   https://t/wp-login.php?redirect_to=FUZZ   ssrf→hunt-ssrf 
 ```
 
 ## Run
+
+> **UAE-hardened fork:** every run goes through `egress_proxy.py` (default-deny, `--rate`
+> default 5/s, capped by the scope's `rate_limit_rps`). A live (non-lab) scope must carry an
+> `authorization` block (`authorization.py`; build one with `scripts/uae_scope.py`). Live
+> `--hunt` refuses to start unless direct egress is closed (run it via `docker/`) or you pass
+> `--soft-egress`.
 ```bash
 # DEFAULT — deterministic map only ($0, no agents). Stops for you with arsenal.md:
 python3 engine/engine.py --scope my-engagement.json

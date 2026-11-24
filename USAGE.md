@@ -439,7 +439,7 @@ If you keep using this and want to extend it:
      ```bash
      python3 engine/engine.py --scope <engagement>.json --hunt --use-memory
      ```
-   - `/autopilot` maps modes to it: `--paranoid` (default) / `--normal` → memory **off** (full coverage, nothing pooled); `--quick` / `--yolo` → memory **on** (persistent recall + token-saving skips).
+   - `/autopilot` maps modes to it: `--paranoid` (default) / `--normal` → memory **off** (full coverage, nothing pooled); `--quick` → memory **on** (`--yolo` is removed in this fork) (persistent recall + token-saving skips).
    - A class never hunted on a stack is never skipped, and every skip is logged — coverage is never silently reduced. Manage the store with `/memory-gc`; review a target's history with `/pickup <host>` (populated only on `--use-memory` runs).
    - Benefit scales with repeat targets / recurring stacks; expect little effect on a cold start (new or one-off stack).
    - **Leak-proof alternative — `--use-metrics`.** Want cross-target learning *without* storing any host/URL? `--use-metrics` records a separate store of **generic counters only** — attempts / successes / cost keyed by tech-stack signature + vuln-class — and ranks class suggestions by past hit-rate in `arsenal.md`. It never stores a hostname, URL, payload, or body (fail-closed), never auto-fires, and leaves scope, the corroborator, and the 7-Question gate fully in charge. Safe to leave on across clients.

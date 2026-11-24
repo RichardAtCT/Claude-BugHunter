@@ -63,6 +63,15 @@ triggers:
   - attribution
 ---
 
+> **Fork policy: UAE-safe mode (overrides anything below).** This fork disables
+> breach-corpus and infostealer lookups (HudsonRock, HIBP, DeHashed, IntelX, LeakCheck and
+> similar), people/employee OSINT (people search, phone, social-media and username
+> investigations, email harvesting), and live validation of discovered secrets against
+> provider APIs. Using leaked credentials or exercising a found key is unauthorised access,
+> and profiling staff is personal-data processing (UAE Federal Decree-Law 34/2021 and the
+> PDPL, Federal Decree-Law 45/2021). If you find a secret, **report it without using it**.
+> Recon stays on the program's in-scope assets. See `programs/uae/README.md`.
+
 # OSINT Methodology — External Red-Team Edition
 
 ## 0. When to use this skill / When NOT

@@ -17,6 +17,7 @@ heuristic (the agent is reserved for the HUNT phase, where judgment is needed).
 
 stdlib-only fallback; uses `requests` if available (gzip/redirects handled cleanly).
 """
+import os
 import re
 from shutil import which
 from urllib.parse import urljoin, urlparse
@@ -382,7 +383,10 @@ def _gau_urls(scope, log):
     urls = {}
     for apex in sorted(apexes):
         try:
-            out = subprocess.run(["gau", apex], capture_output=True, text=True, timeout=120).stdout
+            cmd = ["gau", apex]
+            if os.environ.get("HTTPS_PROXY"):
+                cmd = ["gau", "--proxy", os.environ["HTTPS_PROXY"], apex]   # archive hosts are infra-allowlisted
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=120).stdout
         except Exception:
             out = ""
         for u in out.splitlines():
@@ -394,6 +398,14 @@ def _gau_urls(scope, log):
     return urls
 
 
+def _katana_rate():
+    """katana's -rl is requests/second; follow the engine's --rate (default 5), never above it."""
+    try:
+        return str(max(1, int(float(os.environ.get("BUGHUNTER_RATE", "5")))))
+    except ValueError:
+        return "5"
+
+
 def _katana_urls(scope, log, depth=2, timeout=150):
     """Active live crawl (katana, GET-only) -> in-scope URLs. Independent of gau's flakiness."""
     import subprocess
@@ -403,9 +415,11 @@ def _katana_urls(scope, log, depth=2, timeout=150):
     urls, crawled = {}, 0
     for seed in scope.seeds:
         try:
-            out = subprocess.run(["katana", "-u", seed, "-silent", "-jc", "-d", str(depth),
-                                  "-kf", "all", "-c", "10", "-timeout", "10", "-rl", "100"],
-                                 capture_output=True, text=True, timeout=timeout).stdout
+            cmd = ["katana", "-u", seed, "-silent", "-jc", "-d", str(depth),
+                   "-kf", "all", "-c", "2", "-timeout", "10", "-rl", _katana_rate()]
+            if os.environ.get("HTTPS_PROXY"):
+                cmd += ["-proxy", os.environ["HTTPS_PROXY"]]     # go binaries: be explicit
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
         except Exception:
             out = ""
         for u in out.splitlines():
