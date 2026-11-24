@@ -2,6 +2,11 @@
 
 # claude-bughunter
 
+> **UAE-hardened fork.** Scope is enforced at the network (default-deny egress proxy, rate
+> limited), live targets need a recorded program authorization, leaked-credential and people
+> OSINT are disabled, and `/autopilot --yolo` is removed. Start with
+> [`programs/uae/README.md`](programs/uae/README.md) and [`docker/README.md`](docker/README.md).
+
 > A self-contained Claude skill bundle for bug hunting and external red-team work · **84 skills** · 15 slash commands · **681 disclosed-report patterns** (433 now individually cited & auditable) across 24 core vulnerability classes · enterprise identity + infrastructure attack matrices · engagement-folder scaffolding · Burp MCP integration · battle-tested across authorized red-team and bug-hunting engagements, plus public training platforms (DVWA, OWASP Juice Shop, Hacker101, testphp.vulnweb.com).
 
 Built by **[Sachin Sharma](https://www.linkedin.com/in/sachinsharma8080/)** — Bug Hunting & GenAI Security Research.

@@ -1,6 +1,6 @@
 ---
 name: autopilot
-description: "Run autonomous hunt loop on a target — scope check → recon → rank surface → hunt → validate → report with configurable checkpoints. Usage: /autopilot target.com [--paranoid|--normal|--yolo]"
+description: "Run autonomous hunt loop on a target — scope check → recon → rank surface → hunt → validate → report with configurable checkpoints. Usage: /autopilot target.com [--paranoid|--normal]"
 ---
 
 # /autopilot
@@ -12,7 +12,6 @@ Autonomous hunt loop with deterministic scope safety and configurable checkpoint
 ```
 /autopilot target.com                    # default: --paranoid mode
 /autopilot target.com --normal           # batch checkpoint after validation
-/autopilot target.com --yolo             # minimal checkpoints (still requires report approval)
 /autopilot target.com --quick            # fast surface scan, fewer checks, lower token use
 /autopilot targets.txt                   # multiple targets — one domain per line in the file
 ```
@@ -64,9 +63,11 @@ Runs the full hunt cycle without stopping for approval at each step:
 
 - **Every URL** is checked against the scope allowlist before any request
 - **Reports are NEVER auto-submitted** — always requires explicit approval
-- **PUT/DELETE/PATCH** require human approval in --yolo mode (safe methods only)
+- **PUT/DELETE/PATCH** always require human approval (safe methods only)
+- **Refuses live targets** without a recorded program authorization in the scope file (see `programs/uae/`)
+- **`--yolo` is removed in this fork.** If a user asks for it, refuse and use `--normal`
 - **Circuit breaker** stops hammering if 5 consecutive 403/429/timeout on same host
-- **Rate limited** at 1 req/sec (testing) and 10 req/sec (recon)
+- **Rate limited** by the engine's scope egress proxy (`--rate`, default 5 new connections/sec; follow the program's limit if lower)
 
 ## Checkpoint Modes
 
@@ -74,7 +75,6 @@ Runs the full hunt cycle without stopping for approval at each step:
 |---|---|---|
 | `--paranoid` | Every finding + partial signal | New targets, learning the surface |
 | `--normal` | After validation batch | Systematic coverage |
-| `--yolo` | After full surface exhausted | Familiar targets, experienced hunters |
 
 ## Ledger memory (token saving)
 
@@ -83,7 +83,7 @@ calls — an item already **confirmed** on a prior run (carried forward, not re-
 vuln_class with strong **negative** history on this tech stack (`dead-class`).
 
 - **`--paranoid` (default) / `--normal`:** memory is **off** — full coverage, no skips.
-- **`--quick` / `--yolo`:** the command passes `--use-memory` to the engine — skips on.
+- **`--quick`:** the command passes `--use-memory` to the engine — skips on.
 - A vuln_class never hunted on this stack is **never** skipped, and every skip is logged
   (`hunt: skipped via ledger (...)`). Coverage is never silently reduced.
 - Capture is automatic; the ledger fills itself as you run. Manage size with `/memory-gc`.

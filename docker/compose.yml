@@ -1,0 +1,36 @@
+# Hard-egress mode: scope is enforced by the network, not by prompts.
+#
+#   SCOPE_NAME=<program>.json docker compose -f docker/compose.yml run --rm engine \
+#       --scope /scope/<program>.json --base /out
+#
+# The engine container sits only on `locked` (internal: true => no internet route).
+# The egress container is on both networks and only forwards to in-scope hosts
+# (plus the Anthropic API and passive archive sources), at --rate requests/second.
+services:
+  egress:
+    image: python:3.12-slim
+    command: ["python3", "/app/engine/egress_proxy.py", "--scope", "/scope/${SCOPE_NAME:?set SCOPE_NAME to the scope json file name}",
+              "--bind", "0.0.0.0", "--port", "8888", "--rate", "${RATE:-5}"]
+    volumes:
+      - ..:/app:ro
+      - ${SCOPE_DIR:-../programs/uae/scopes}:/scope:ro
+    networks: [locked, outside]
+    restart: unless-stopped
+
+  engine:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.engine
+    depends_on: [egress]
+    environment:
+      BUGHUNTER_EGRESS_PROXY: http://egress:8888
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ${SCOPE_DIR:-../programs/uae/scopes}:/scope:ro
+      - ${OUT_DIR:-./out}:/out
+    networks: [locked]
+
+networks:
+  locked:
+    internal: true
+  outside: {}

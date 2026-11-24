@@ -22,7 +22,6 @@ Auto-triggers on prompts containing any of ~110 trigger phrases. Common ones:
 - `mobile recon`, `APK analysis`, `Microsoft 365 deep`, `Teams federation`, `SharePoint enum`, `OneDrive enum`
 - `secret scanning`, `secret leak`, `leaked credential`, `JWT triage`, `AWS key triage`
 - `github dorking`, `google dorking`, `postman workspace`, `stack exchange OSINT`
-- `breach lookup`, `have I been pwned`, `HudsonRock cavalier`, `infostealer`, `dehashed`, `intelx`
 - `shodan recon`, `censys recon`, `certificate transparency`, `crt.sh`, `JARM`, `favicon mmh3`
 - `JS endpoint extraction`, `sourcemap leak`
 - `copy paste probes`, `curl one-liner`
