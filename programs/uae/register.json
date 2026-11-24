@@ -6,7 +6,7 @@
       "id": "uae-national-vdp",
       "name": "UAE National Vulnerability Disclosure Policy",
       "owner": "UAE Cyber Security Council",
-      "platform": "National VDP platform (tester registration required)",
+      "platform": "CSC VDP Platform: https://bugbounty.ae (tester registration and approval required)",
       "policy_url": "https://u.ae/en/about-the-uae/strategies-initiatives-and-awards/policies/cyber-activities/National-Vulnerability-Disclosure-Policy",
       "status": "to-verify",
       "verified_on": "",
@@ -19,11 +19,15 @@
       "intrusive_allowed": false,
       "rewards": "non-monetary recognition",
       "rules": [
-        "Register as a tester on the national VDP platform before any testing",
-        "Only entities and assets listed for you on the platform are in scope",
-        "Report to the platform within the timelines in the V1.0 policy PDF"
+        "Register on https://bugbounty.ae with identity and competency details, sign the NDA, give proof of UAE residency and a police clearance / good conduct certificate; test only after approval (policy 2.2.1)",
+        "Pilot phase: testers limited to authorised UAE nationals and low-risk government services; UAE residents are added after the pilot (policy section 3)",
+        "Only assets the entity has enlisted on the platform are in scope (2.2.2.3)",
+        "Prohibited: DoS/DDoS, physical testing, social engineering, persistent access, changing data, malware, brute force (2.1.1.9)",
+        "Do not intentionally access sensitive data; if you encounter PII, financial or proprietary data, stop and notify the entity and CSC (2.1.1.7, 2.3.1.2)",
+        "Stop testing and report through the platform as soon as a vulnerability is found (2.3.1.2)",
+        "Never disclose to third parties; disclosure is at CSC's and the entity's discretion; securely delete all collected data and be ready to evidence deletion (2.1.1.5, 2.1.1.8, 2.5.1.6)"
       ],
-      "notes": "Official route for UAE entities and critical systems. Read the V1.0 policy PDF on csc.gov.ae for safe-harbour terms and prohibited activities before activating."
+      "notes": "Policy V1.0 PDF read 2026-11-24. Rewards: recognition letter (non-monetary). Reports acknowledged within 48 hours. Set status to active only after the platform approves you, and fill in scope from the assets it lists."
     },
     {
       "id": "uae-national-bug-bounty",
@@ -41,7 +45,9 @@
       "required_headers": {},
       "intrusive_allowed": false,
       "rewards": "monetary (per 2021 announcement)",
-      "rules": ["Vetted researchers only; follow the rules of engagement issued with your invitation"],
+      "rules": [
+        "Vetted researchers only; follow the rules of engagement issued with your invitation"
+      ],
       "notes": "Announced Aug 2021. Current status after the telecom pilot is unknown: confirm with the Council before relying on it. The policy_url is a news article, not a policy; replace it with the official rules once obtained."
     },
     {
@@ -60,7 +66,9 @@
       "required_headers": {},
       "intrusive_allowed": false,
       "rewards": "event prizes",
-      "rules": ["Only during the event window and only on the assets issued at the event"],
+      "rules": [
+        "Only during the event window and only on the assets issued at the event"
+      ],
       "notes": "Event-based. Replace policy_url with the event's rules page when registering."
     },
     {
